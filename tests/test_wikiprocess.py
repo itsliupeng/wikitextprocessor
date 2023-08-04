@@ -9,6 +9,7 @@ import unittest
 from typing import Optional
 from unittest.mock import patch
 
+
 from wikitextprocessor import Wtp, Page
 from wikitextprocessor.common import MAGIC_NOWIKI_CHAR
 
@@ -3619,3 +3620,7 @@ return export
 # XXX test case variations of template names and parser function names
 #  - these are apparently configured for each wiki and listed in the
 #    dump file
+
+
+if __name__ == '__main__':
+    unittest.main()

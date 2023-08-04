@@ -55,3 +55,7 @@ class LongTests(unittest.TestCase):
     )
     def test_long_multiprocessing(self):
         self.runonce(None)
+
+
+if __name__ == '__main__':
+    unittest.main()
