@@ -3,9 +3,9 @@ import platform
 import unittest
 import re
 import json
+import logging
 
 from wikitextprocessor import Wtp, Page, NodeKind, WikiNode
-# from wikitextparser import remove_markup, WikiText, parse
 from wikitextprocessor import parser
 from wikitextprocessor.node_expand import to_attrs, ALLOWED_HTML_TAGS
 
@@ -43,13 +43,6 @@ def parse_template(node: WikiNode, parts: list):
         args = node.args[1:]
         if t_name.startswith('Quote box'):
             pass
-        #     quote = ""
-        #     for a in node.args[1:]:
-        #         if a[0].startswith('quote'):
-        #             quote = a[0].split('=')[-1].strip()
-        #     if len(quote) > 0:
-        #         cleaned_text = re.sub(r'<ref.*$', '', quote)
-        #         parts.append(f"<blockquote><p>{cleaned_text}</p></blockquote>")
         elif t_name in ['quote', 'cquote']:
             quote = recurse(node.args)
             cleaned_text = re.sub(r'<ref.*$', '', quote)
@@ -108,16 +101,11 @@ def parse_template(node: WikiNode, parts: list):
         elif len(node.args) == 2:
             pass
     except Exception as e:
-        print(f"{node} error: {e}")
+        print(f"error in {node} : {e}")
     
-
-
 
 def recurse(node, node_handler_fn=None):
     if isinstance(node, str):
-        if "些作者會特別選擇一些文學技巧來讓讀者有意外的感受" in node:
-            pass
-
         # Certain constructs needs to be protected so that they don't get
         # parsed when we convert back and forth between wikitext and parsed
         # representations.
@@ -143,9 +131,6 @@ def recurse(node, node_handler_fn=None):
         tag = kind_to_level[kind]
         t = recurse(node.args)
 
-        if t in ['延伸阅读']:
-            pass
-
         if t in ['脚注', '腳註', '参考文献', '參考文獻', '外部链接', '外部連結', '参考', '參考', '注释', '註釋']:
             pass
         else:
@@ -163,19 +148,14 @@ def recurse(node, node_handler_fn=None):
         parts.append(f"<{tag}>{recurse(node.children)}</{tag}>")
     elif kind == NodeKind.LIST_ITEM:
         assert isinstance(node.args, str)
-        # parts.append(node.args)
-        # prev_list = False
         if node.args != ';':
             parts.append("<li>")
         else:
             pass
         for x in node.children:
-            # if prev_list:
-            #     parts.append(node.args + ":")
             parts.append(recurse(x))
-            # prev_list = isinstance(x, WikiNode) and x.kind == NodeKind.LIST
 
-        if node.args != ',':
+        if node.args != ';':
             parts.append("</li>")
         # filter \n
         parts = [x for x in parts if x != "\n"]
@@ -186,21 +166,31 @@ def recurse(node, node_handler_fn=None):
     elif kind == NodeKind.PREFORMATTED:
         parts.append(recurse(node.children))
     elif kind == NodeKind.LINK:
-        t_name = node.args[0][0]
-        if t_name.startswith('File:') or t_name.startswith(
-                'Category'):  # <LINK(['File:Gyzis 006 (Ηistoria).jpeg'], ['thumb'], ['Historia － 历史的化身', <HTML(br){} >, <LINK(['尼古拉斯·吉热斯']){} >, '（1892）']){} >
+        if len(node.args[0]) == 0:
             pass
         else:
-            args = remove_empty_arg(node.args[1:])
-            if len(args) > 0 and len(args[-1][0]) > 0:
-                parts.append(f'<a href="">{args[-1][0]}</a>')  # <LINK(['日历日期'], ['日期']){} >
-                parts.append(recurse(node.children))
+            t_name = node.args[0][0]
+            if not isinstance(t_name, str):
+                print(f"check: LINK not string {t_name}")
+                pass
+            else:
+                if t_name.startswith('File:') or t_name.startswith('Category'):
+                    pass
+                else:
+                    args = remove_empty_arg(node.args)
+                    if len(args) > 0:
+                        content = recurse(args[-1]) if isinstance(args[-1], WikiNode) else args[-1][0]
+                        if isinstance(args[-1], WikiNode):
+                            print(f"check {content}")
+                        parts.append(f'<a href="">{content}</a>')  # <LINK(['日历日期'], ['日期']){} >
+                        parts.append(recurse(node.children))
     elif kind == NodeKind.TEMPLATE:
         global template_dict
-        t_name = node.args[0][0]
-        key = (t_name, len(node.args))
-        if key not in template_dict and not is_chinese(t_name):
-            template_dict[key] = node
+        if len(node.args[0]) > 0:
+            t_name = node.args[0][0]
+            key = (t_name, len(node.args))
+            if key not in template_dict and not is_chinese(t_name):
+                template_dict[key] = node
 
         parse_template(node, parts)
 
@@ -209,9 +199,9 @@ def recurse(node, node_handler_fn=None):
         parts.append("|".join(map(recurse, node.args)))
         parts.append("}}}")
     elif kind == NodeKind.PARSER_FN:
-        parts.append("{{" + recurse(node.args[0]) + ":")
-        parts.append("|".join(map(recurse, node.args[1:])))
-        parts.append("}}")
+        pass # parts.append("{{" + recurse(node.args[0]) + ":")
+        # parts.append("|".join(map(recurse, node.args[1:])))
+        # parts.append("}}")
     elif kind == NodeKind.URL:
         pass  # parts.append("[")
         # if node.args:
@@ -313,10 +303,10 @@ def to_markdwon_html(node: WikiNode, node_handler_fn=None):
     assert node_handler_fn is None or callable(node_handler_fn)
 
     try:
-        recurse(node)
+        ret = recurse(node)
     except Exception as e:
-        print(f"{node} error: {e}")
-    return recurse(node)
+        pass
+    return ret
  
 
 def clean_text(text):
@@ -324,8 +314,12 @@ def clean_text(text):
     text = re.sub(r'</h[2-6]><br>', lambda m: m.group(0)[:-4], text)
     return text
 
-def truncate_artitle(text):
-    return text
+
+
+def remove_last_heading_content(html):
+    pattern = r'<h([2-6])>.*?</h\1>$'
+    return re.sub(pattern, '', html)
+
     
 def page_handler(page: Page) -> None:
     if page.model != "wikitext" or page.title.startswith("Template:") or page.redirect_to is not None or not isinstance(page.body, str):
@@ -334,44 +328,74 @@ def page_handler(page: Page) -> None:
     
     body = page.body
     
+    # remove 目录
+    body = re.sub(r'__TOC__', '', body, flags=re.DOTALL)
+    
     # remove table
-    body = re.sub(r':\{\|.*?\|\}', '', body, flags=re.DOTALL)
+    body = re.sub(r'\{\|.*?\|\}', '', body, flags=re.DOTALL)
+    # remove all html tag
+    body = re.sub(r'<([^>]+)>.*?</\1>', '', body, flags=re.DOTALL)
     
     
-    root = ctx.parse(body, pre_expand=False)
-
-    # html_text = ctx.node_to_html(root)
-    
+    root = ctx.parse(body, pre_expand=False)  
+      
     text_md = to_markdwon_html(root)
     
     text = clean_text(text_md)
-    text = truncate_artitle(text)
-    
-    # print(parsed)
+    text = remove_last_heading_content(text)
+
     title = page.title
     
     return title, text
     
 
 if __name__ == "__main__": 
+    logging.basicConfig(level=logging.INFO)  # 设置日志级别为 INFO
+    import argparse
+
+    parser = argparse.ArgumentParser(description="wiki_parser")
+    parser.add_argument("--input", type=str, required=True, help="in xml file")
+    parser.add_argument("--output", type=str, required=True, default="wiki.jsonl", help="output file")
+    parser.add_argument("--num-threads", type=int, default=1, help="num threads")
+    parser.add_argument("--db-path", type=str, default="/tmp/db", help="db path")
+    parser.add_argument("--template", type=str, default="template.txt", help="saved template path")
+
+    args = parser.parse_args()
+    
+    
     # path = "/lp/data/tmp/xiju.xml"
     # path = "/lp/code/wikitextprocessor/tests/test-pages-articles.xml"
     # path = "/lp/data/zhwiki/simple.xml"
-    path = "/lp/data/zhwiki/zhwiki-20230601-pages-articles-multistream.xml"
-    print("Parsing test data")
+    # path = "/lp/data/wiki/enwiki-20230801-pages-articles.xml"
+    # path = "/lp/data/zhwiki/zhwiki-20230720-pages-articles-multistream.xml"
+    # print("Parsing test data")
+    
+    path = args.input
+    output_file = args.output
+    db_path =args.db_path
+    num_threads = args.num_threads
+    
 
-    ctx = Wtp(db_path="/lp/data/db/db.test", num_threads=20)
-    
-    
+    ctx = Wtp(db_path=db_path, num_threads=num_threads)
     template_dict = {}
+    
+    
+
+    # body = """
+
+    # """
+    # ctx.title = 'test'
+    # root = ctx.parse(body, pre_expand=False)
+
+    # print('Done')
+
+    
+    
     ret = ctx.process(
         path, page_handler, {0}
     )
 
-
-    # ret = ctx.process(path, page_handler)
-    
-    of = open('/lp/data/zhwiki/zhwiki_html.jsonl', 'w')
+    of = open(output_file, 'w')
 
     num = 0
     for title, text in ret:
@@ -387,8 +411,8 @@ if __name__ == "__main__":
             
     of.close() 
     
-# template_list = [(k[0], k[1], v) for k, v in template_dict.items()]
-# sorted(template_list, key=lambda x: (x[0], x[1]))
-# with open('/lp/data/zhwiki/template.txt', 'w') as of:
-#     for k1, k2,  v in template_list:
-#         of.write(f"{k1}\t{k2}\t{v}\n")
+template_list = [(k[0], k[1], v) for k, v in template_dict.items()]
+sorted(template_list, key=lambda x: (x[0], x[1]))
+with open(args.template, 'w') as of:
+    for k1, k2,  v in template_list:
+        of.write(f"{k1}\t{k2}\t{v}\n")
